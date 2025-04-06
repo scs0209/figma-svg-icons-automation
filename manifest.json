@@ -1,0 +1,25 @@
+{
+  "name": "SVG 아이콘 자동화 플러그인",
+  "id": "svg-icon-automation",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "capabilities": ["codegen"],
+  "enableProposedApi": false,
+  "editorType": ["figma", "dev"],
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "SVG 아이콘을 다운로드하고 외부 API와 통신하기 위해 네트워크 접근이 필요합니다."
+  },
+  "permissions": ["currentuser"],
+  "codegenLanguages": [
+    {
+      "label": "TypeScript",
+      "value": "typescript"
+    },
+    {
+      "label": "JavaScript",
+      "value": "javascript"
+    }
+  ]
+}
