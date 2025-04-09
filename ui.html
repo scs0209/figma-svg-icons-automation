@@ -2,71 +2,281 @@
 <html>
   <head>
     <style>
-      body {
-        font-family: Inter, sans-serif;
-        margin: 0;
-        padding: 16px;
+      :root {
+        --primary-color: #18a0fb;
+        --primary-hover: #0d8de6;
+        --error-color: #d93025;
+        --success-color: #137333;
+        --info-color: #1a73e8;
+        --border-color: #e5e5e5;
+        --text-color: #333333;
+        --background-color: #ffffff;
+        --input-background: #f8f9fa;
       }
-      input,
-      select,
+
+      body {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background-color: var(--background-color);
+        color: var(--text-color);
+      }
+
+      .container {
+        max-width: 400px;
+        margin: 0 auto;
+      }
+
+      h2 {
+        margin: 0 0 24px;
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-color);
+      }
+
+      .input-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-color);
+      }
+
+      input[type="password"],
+      input[type="text"] {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background-color: var(--input-background);
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      input[type="password"]:focus,
+      input[type="text"]:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(24, 160, 251, 0.1);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        margin-top: 12px;
+        gap: 8px;
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--primary-color);
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        font-weight: 400;
+      }
+
       button {
         width: 100%;
-        margin-bottom: 12px;
-        padding: 8px;
-        border-radius: 4px;
-        border: 1px solid #e5e5e5;
-      }
-      button {
-        background-color: #18a0fb;
+        padding: 12px;
+        background-color: var(--primary-color);
         color: white;
         border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
         cursor: pointer;
-        padding: 10px;
+        transition: background-color 0.2s;
       }
+
+      button:hover {
+        background-color: var(--primary-hover);
+      }
+
       button:disabled {
         background-color: #cccccc;
+        cursor: not-allowed;
       }
+
       .output {
-        margin-top: 16px;
-        border: 1px solid #e5e5e5;
-        border-radius: 4px;
-        padding: 12px;
+        margin-top: 24px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 16px;
         max-height: 200px;
         overflow-y: auto;
+        background-color: var(--input-background);
       }
+
+      .output p {
+        margin: 0 0 8px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .output p:last-child {
+        margin-bottom: 0;
+      }
+
       .error {
-        color: #d93025;
+        color: var(--error-color);
       }
+
       .success {
-        color: #137333;
+        color: var(--success-color);
       }
+
       .info {
-        color: #1a73e8;
+        color: var(--info-color);
+      }
+
+      .token-info {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+      }
+
+      .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
     </style>
   </head>
   <body>
-    <h2>SVG 아이콘 자동화</h2>
+    <div class="container">
+      <h2>SVG 아이콘 자동화</h2>
 
-    <div>
-      <label for="githubToken">GitHub Personal Access Token:</label>
-      <input id="githubToken" type="password" placeholder="ghp_..." />
+      <div class="input-group">
+        <label for="githubToken">GitHub Personal Access Token</label>
+        <input 
+          id="githubToken" 
+          type="password" 
+          placeholder="ghp_..." 
+          autocomplete="off" 
+        />
+        <div class="token-info">
+          토큰은 GitHub에서 발급받을 수 있습니다. 저장된 토큰은 로컬에만 저장됩니다.
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="saveToken" />
+          <label for="saveToken">토큰 저장하기</label>
+        </div>
+      </div>
+
+      <button id="exportButton" disabled>
+        <span id="loadingIndicator" class="loading" style="display: none;"></span>
+        아이콘 내보내기 및 PR 생성
+      </button>
+
+      <div class="output" id="output">
+        <p class="info">로그 메시지가 여기에 표시됩니다.</p>
+      </div>
     </div>
-
-    <button id="exportButton" disabled>아이콘 내보내기 및 PR 생성</button>
-
-    <div class="output" id="output">로그 메시지가 여기에 표시됩니다.</div>
 
     <script>
       let svgExports = [];
       const output = document.getElementById('output');
       const exportButton = document.getElementById('exportButton');
       const githubTokenInput = document.getElementById('githubToken');
+      const saveTokenCheckbox = document.getElementById('saveToken');
+
+      // 암호화 키 (실제 프로덕션에서는 더 안전한 방법으로 관리해야 함)
+      const ENCRYPTION_KEY = 'shopl-icon-automation-2024';
+
+      // 간단한 암호화 함수
+      function encrypt(text) {
+        let result = '';
+        for (let i = 0; i < text.length; i++) {
+          const charCode = text.charCodeAt(i) ^ ENCRYPTION_KEY.charCodeAt(i % ENCRYPTION_KEY.length);
+          result += String.fromCharCode(charCode);
+        }
+        return btoa(result);
+      }
+
+      // 복호화 함수
+      function decrypt(encryptedText) {
+        try {
+          const decoded = atob(encryptedText);
+          let result = '';
+          for (let i = 0; i < decoded.length; i++) {
+            const charCode = decoded.charCodeAt(i) ^ ENCRYPTION_KEY.charCodeAt(i % ENCRYPTION_KEY.length);
+            result += String.fromCharCode(charCode);
+          }
+          return result;
+        } catch (error) {
+          console.error('복호화 실패:', error);
+          return null;
+        }
+      }
+
+      // 저장된 토큰 불러오기
+      (async () => {
+        parent.postMessage({ 
+          pluginMessage: { 
+            type: 'get-token'
+          } 
+        }, '*');
+      })();
 
       // GitHub 토큰 입력 감지
-      githubTokenInput.addEventListener('input', () => {
+      githubTokenInput.addEventListener('input', async () => {
         const token = githubTokenInput.value.trim();
         exportButton.disabled = !token;
+        
+        // 토큰 저장 체크박스가 체크되어 있을 때만 저장
+        if (saveTokenCheckbox.checked && token) {
+          const encryptedToken = encrypt(token);
+          parent.postMessage({ 
+            pluginMessage: { 
+              type: 'set-token',
+              token: encryptedToken
+            } 
+          }, '*');
+        } else {
+          parent.postMessage({ 
+            pluginMessage: { 
+              type: 'delete-token'
+            } 
+          }, '*');
+        }
+      });
+
+      // 체크박스 변경 감지
+      saveTokenCheckbox.addEventListener('change', async () => {
+        const token = githubTokenInput.value.trim();
+        if (saveTokenCheckbox.checked && token) {
+          const encryptedToken = encrypt(token);
+          parent.postMessage({ 
+            pluginMessage: { 
+              type: 'set-token',
+              token: encryptedToken
+            } 
+          }, '*');
+        } else {
+          parent.postMessage({ 
+            pluginMessage: { 
+              type: 'delete-token'
+            } 
+          }, '*');
+        }
       });
 
       // 피그마로부터 메시지 수신
@@ -81,6 +291,15 @@
           await pushToGitHub();
         } else if (msg.type === 'error') {
           log(msg.message, 'error');
+        } else if (msg.type === 'token-loaded') {
+          if (msg.token) {
+            const decryptedToken = decrypt(msg.token);
+            if (decryptedToken) {
+              githubTokenInput.value = decryptedToken;
+              exportButton.disabled = false;
+              saveTokenCheckbox.checked = true;
+            }
+          }
         }
       };
 
@@ -163,6 +382,9 @@
 
         if (!response.ok) {
           const error = await response.json();
+          if (error.message && error.message.includes('"sha" wasn\'t supplied')) {
+            throw new Error('이미 존재하는 아이콘입니다');
+          }
           throw new Error(`파일 업로드 실패: ${error.message}`);
         }
       }
@@ -213,12 +435,12 @@
 
           if (!response.ok) {
             const error = await response.json();
-            log(`브랜치 생성 응답: ${JSON.stringify(error)}`, 'error');
             
             if (error.message && error.message.includes('Reference already exists')) {
-              log('브랜치가 이미 존재합니다. 해당 브랜치를 사용합니다.', 'success');
+              log('브랜치가 이미 존재합니다. 해당 브랜치를 사용합니다.', 'info');
               return true;
             }
+            log(`브랜치 생성 실패: ${error.message}`, 'error');
             throw new Error(`브랜치 생성 실패: ${response.statusText}`);
           }
 

@@ -94,5 +94,15 @@ figma.ui.onmessage = async (msg) => {
     await runCommand(msg.data.command, msg.data.cwd);
   } else if (msg.type === 'close') {
     figma.closePlugin();
+  } else if (msg.type === 'get-token') {
+    const token = await figma.clientStorage.getAsync('githubToken');
+    figma.ui.postMessage({
+      type: 'token-loaded',
+      token: token
+    });
+  } else if (msg.type === 'set-token') {
+    await figma.clientStorage.setAsync('githubToken', msg.token);
+  } else if (msg.type === 'delete-token') {
+    await figma.clientStorage.deleteAsync('githubToken');
   }
 };
