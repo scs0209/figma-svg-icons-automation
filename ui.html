@@ -12,6 +12,8 @@
         --text-color: #333333;
         --background-color: #ffffff;
         --input-background: #f8f9fa;
+        --icon-color: #666666;
+        --icon-hover-color: #333333;
       }
 
       body {
@@ -36,6 +38,35 @@
 
       .input-group {
         margin-bottom: 20px;
+        position: relative;
+      }
+
+      .token-toggle {
+        position: absolute;
+        right: 12px;
+        top: 36%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        padding: 4px;
+        cursor: pointer;
+        color: var(--icon-color);
+        font-size: 12px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s ease;
+      }
+
+      .token-toggle:hover {
+        color: var(--icon-hover-color);
+      }
+
+      .token-toggle svg {
+        width: 16px;
+        height: 16px;
       }
 
       label {
@@ -49,7 +80,7 @@
       input[type="password"],
       input[type="text"] {
         width: 100%;
-        padding: 12px;
+        padding: 12px 80px 12px 12px;
         border: 1px solid var(--border-color);
         border-radius: 8px;
         background-color: var(--input-background);
@@ -172,6 +203,12 @@
           placeholder="ghp_..." 
           autocomplete="off" 
         />
+        <button type="button" class="token-toggle" id="toggleToken" title="토큰 보이기/숨기기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
         <div class="token-info">
           토큰은 GitHub에서 발급받을 수 있습니다. 저장된 토큰은 로컬에만 저장됩니다.
         </div>
@@ -197,6 +234,16 @@
       const exportButton = document.getElementById('exportButton');
       const githubTokenInput = document.getElementById('githubToken');
       const saveTokenCheckbox = document.getElementById('saveToken');
+      const toggleTokenButton = document.getElementById('toggleToken');
+
+      // 토큰 표시/숨김 토글
+      toggleTokenButton.addEventListener('click', () => {
+        const isPassword = githubTokenInput.type === 'password';
+        githubTokenInput.type = isPassword ? 'text' : 'password';
+        toggleTokenButton.innerHTML = isPassword ? 
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' :
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+      });
 
       // 암호화 키 (실제 프로덕션에서는 더 안전한 방법으로 관리해야 함)
       const ENCRYPTION_KEY = 'shopl-icon-automation-2024';
