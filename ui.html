@@ -44,7 +44,7 @@
       .token-toggle {
         position: absolute;
         right: 12px;
-        top: 36%;
+        top: 40%;
         transform: translateY(-50%);
         background: none;
         border: none;
@@ -189,6 +189,19 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+
+      #deleteButton {
+        background-color: #ffb3b3;
+        color: white;
+      }
+      #deleteButton:hover {
+        background-color: #ff6666;
+      }
+      .delete-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
     </style>
   </head>
   <body>
@@ -218,10 +231,14 @@
         </div>
       </div>
 
-      <button id="exportButton" disabled>
+      <button id="exportButton" disabled style="margin-bottom: 12px;">
         <span id="loadingIndicator" class="loading" style="display: none;"></span>
         아이콘 내보내기 및 PR 생성
       </button>
+      <div style="margin-bottom: 12px;"></div>
+      <div class="delete-group" style="margin-bottom: 12px;">
+        <button id="deleteButton" style="background-color: #ffb3b3; color: white; margin-top: 0; margin-bottom: 0; transition: background 0.2s; width: 100%;">아이콘 삭제</button>
+      </div>
 
       <div class="output" id="output">
         <p class="info">로그 메시지가 여기에 표시됩니다.</p>
@@ -235,6 +252,7 @@
       const githubTokenInput = document.getElementById('githubToken');
       const saveTokenCheckbox = document.getElementById('saveToken');
       const toggleTokenButton = document.getElementById('toggleToken');
+      const deleteButton = document.getElementById('deleteButton');
 
       // 토큰 표시/숨김 토글
       toggleTokenButton.addEventListener('click', () => {
@@ -331,8 +349,23 @@
         const msg = event.data.pluginMessage;
 
         if (msg.type === 'svg-exports') {
-          svgExports = msg.data;
-          log(`${svgExports.length}개의 아이콘이 내보내졌습니다.`, 'success');
+          // 'ic'가 포함된 아이콘만 필터링
+          const validIcons = msg.data.filter(icon => {
+            const fileName = icon.name.split('/').pop();
+            if (!fileName.toLowerCase().includes('ic')) {
+              log(`경고: ${fileName} - 아이콘 이름에 'ic'가 포함되어 있지 않아 내보내기가 제외되었습니다.`, 'error');
+              return false;
+            }
+            return true;
+          });
+
+          if (validIcons.length === 0) {
+            log('오류: 내보내기 가능한 아이콘이 없습니다. 아이콘 이름에 "ic"가 포함되어야 합니다.', 'error');
+            return;
+          }
+
+          svgExports = validIcons;
+          log(`${svgExports.length}개의 아이콘이 정상적으로 내보내기 되었습니다.`, 'success');
           
           // 아이콘 내보내기가 완료되면 GitHub에 푸시
           await pushToGitHub();
@@ -346,6 +379,11 @@
               exportButton.disabled = false;
               saveTokenCheckbox.checked = true;
             }
+          }
+        } else if (msg.type === 'delete-names') {
+          const token = githubTokenInput.value.trim();
+          for (const iconName of msg.data) {
+            await deleteFile(token, iconName);
           }
         }
       };
@@ -407,9 +445,29 @@
       // 파일 업로드
       async function uploadFile(token, item) {
         const fileName = item.name.split('/').pop(); // 폴더 경로 제거
-        const path = `packages/shopl-assets/src/icons/assets/${fileName}.svg`;
+        const prefix = item.name.split('/')[0];
+        const path = `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
         const content = btoa(unescape(encodeURIComponent(item.data)));
 
+        // 1. 기존 파일 정보 가져오기
+        const getResponse = await fetch(
+          `https://api.github.com/repos/shopl/shoplflow/contents/${path}?ref=update/icon`,
+          {
+            headers: {
+              Authorization: `token ${token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/vnd.github.v3+json',
+            },
+          }
+        );
+
+        let sha = null;
+        if (getResponse.ok) {
+          const fileInfo = await getResponse.json();
+          sha = fileInfo.sha;
+        }
+
+        // 2. 파일 업로드/업데이트
         const response = await fetch(
           `https://api.github.com/repos/shopl/shoplflow/contents/${path}`,
           {
@@ -420,18 +478,16 @@
               Accept: 'application/vnd.github.v3+json',
             },
             body: JSON.stringify({
-              message: 'icon 추가',
+              message: 'icon 추가/업데이트',
               content: content,
               branch: 'update/icon',
+              ...(sha && { sha: sha }), // 기존 파일이 있으면 SHA 포함
             }),
           }
         );
 
         if (!response.ok) {
           const error = await response.json();
-          if (error.message && error.message.includes('"sha" wasn\'t supplied')) {
-            throw new Error('이미 존재하는 아이콘입니다');
-          }
           throw new Error(`파일 업로드 실패: ${error.message}`);
         }
       }
@@ -498,6 +554,65 @@
           log(`브랜치 생성 상세 오류: ${error.message}`, 'error');
           throw new Error(`브랜치 생성 오류: ${error.message}`);
         }
+      }
+
+      deleteButton.onclick = async () => {
+        try {
+          const token = githubTokenInput.value.trim();
+          if (!token) {
+            log('GitHub 토큰을 입력해주세요.', 'error');
+            return;
+          }
+          parent.postMessage({ pluginMessage: { type: 'delete-svg' } }, '*');
+        } catch (error) {
+          log(`삭제 오류: ${error.message}`, 'error');
+        }
+      };
+
+      async function deleteFile(token, iconName) {
+        const prefix = iconName.split('/')[0];
+        const fileName = iconName.split('/').pop();
+        const path = `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
+        // 1. sha 조회
+        const getResponse = await fetch(
+          `https://api.github.com/repos/shopl/shoplflow/contents/${path}?ref=update/icon`,
+          {
+            headers: {
+              Authorization: `token ${token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/vnd.github.v3+json',
+            },
+          }
+        );
+        if (!getResponse.ok) {
+          log(`삭제 실패: 파일을 찾을 수 없습니다. (${path})`, 'error');
+          return;
+        }
+        const fileInfo = await getResponse.json();
+        const sha = fileInfo.sha;
+        // 2. 삭제 요청
+        const response = await fetch(
+          `https://api.github.com/repos/shopl/shoplflow/contents/${path}`,
+          {
+            method: 'DELETE',
+            headers: {
+              Authorization: `token ${token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/vnd.github.v3+json',
+            },
+            body: JSON.stringify({
+              message: 'icon 삭제',
+              sha: sha,
+              branch: 'update/icon',
+            }),
+          }
+        );
+        if (!response.ok) {
+          const error = await response.json();
+          log(`삭제 실패: ${error.message}`, 'error');
+          return;
+        }
+        log(`${iconName} 아이콘이 성공적으로 삭제되었습니다.`, 'success');
       }
     </script>
   </body>

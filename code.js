@@ -104,5 +104,13 @@ figma.ui.onmessage = async (msg) => {
     await figma.clientStorage.setAsync('githubToken', msg.token);
   } else if (msg.type === 'delete-token') {
     await figma.clientStorage.deleteAsync('githubToken');
+  } else if (msg.type === 'delete-svg') {
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      figma.notify('선택된 아이콘이 없습니다.');
+      return;
+    }
+    const names = selection.map(node => node.name);
+    figma.ui.postMessage({ type: 'delete-names', data: names });
   }
 };
