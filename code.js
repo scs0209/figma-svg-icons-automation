@@ -1,5 +1,19 @@
 figma.showUI(__html__, { width: 400, height: 400 });
 
+// UI에 현재 선택 상태를 동기화하는 함수
+function syncSelectionToUI() {
+  const selection = figma.currentPage.selection;
+  const count = selection.length;
+  const icCount = selection.filter(node => node.name.toLowerCase().includes('ic')).length;
+  figma.ui.postMessage({ type: 'selection-changed', count, icCount });
+}
+
+// selectionchange 이벤트에서 UI로 선택 개수 전달
+figma.on('selectionchange', syncSelectionToUI);
+
+// 플러그인 실행 시에도 동기화
+syncSelectionToUI();
+
 // 선택된 노드를 SVG로 내보내기
 async function exportSelectedNodesToSvg() {
   const selectedNodes = figma.currentPage.selection;

@@ -89,7 +89,8 @@
       }
 
       input[type="password"]:focus,
-      input[type="text"]:focus {
+      input[type="text"]:focus
+      select:focus {
         outline: none;
         border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba(24, 160, 251, 0.1);
@@ -186,16 +187,33 @@
         vertical-align: middle;
       }
 
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background-color: var(--input-background);
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
 
       #deleteButton {
-        background-color: #ffb3b3;
-        color: white;
+        background-color: #f8d7da;
+        color: #a94442;
+        border: 1px solid #f5c6cb;
       }
-      #deleteButton:hover {
-        background-color: #ff6666;
+      #deleteButton:hover:enabled {
+        background-color: #f1b0b7;
+      }
+      #deleteButton:disabled {
+        background-color: #f8f9fa;
+        color: #cccccc;
+        border: 1px solid #e5e5e5;
+        cursor: not-allowed;
       }
       .delete-group {
         display: flex;
@@ -207,6 +225,14 @@
   <body>
     <div class="container">
       <h2>Shoplcon</h2>
+
+      <div class="input-group">
+        <label for="platformSelect">대상 플랫폼</label>
+        <select id="platformSelect">
+          <option value="web">웹</option>
+          <option value="mobile">모바일</option>
+        </select>
+      </div>
 
       <div class="input-group">
         <label for="githubToken">GitHub Personal Access Token</label>
@@ -237,7 +263,7 @@
       </button>
       <div style="margin-bottom: 12px;"></div>
       <div class="delete-group" style="margin-bottom: 12px;">
-        <button id="deleteButton" style="background-color: #ffb3b3; color: white; margin-top: 0; margin-bottom: 0; transition: background 0.2s; width: 100%;">아이콘 삭제</button>
+        <button id="deleteButton" disabled style="margin-top: 0; margin-bottom: 0; transition: background 0.2s; width: 100%;">아이콘 삭제</button>
       </div>
 
       <div class="output" id="output">
@@ -253,6 +279,7 @@
       const saveTokenCheckbox = document.getElementById('saveToken');
       const toggleTokenButton = document.getElementById('toggleToken');
       const deleteButton = document.getElementById('deleteButton');
+      const platformSelect = document.getElementById('platformSelect');
 
       // 토큰 표시/숨김 토글
       toggleTokenButton.addEventListener('click', () => {
@@ -351,7 +378,7 @@
         if (msg.type === 'svg-exports') {
           // 'ic'가 포함된 아이콘만 필터링
           const validIcons = msg.data.filter(icon => {
-            const fileName = icon.name.split('/').pop();
+            const fileName = icon.name.split('/').pop().trim();
             if (!fileName.toLowerCase().includes('ic')) {
               log(`경고: ${fileName} - 아이콘 이름에 'ic'가 포함되어 있지 않아 내보내기가 제외되었습니다.`, 'error');
               return false;
@@ -385,6 +412,12 @@
           for (const iconName of msg.data) {
             await deleteFile(token, iconName);
           }
+        } else if (msg.type === 'selection-changed') {
+          if (msg.icCount && msg.icCount > 0) {
+            deleteButton.disabled = false;
+          } else {
+            deleteButton.disabled = true;
+          }
         }
       };
 
@@ -401,23 +434,20 @@
       exportButton.onclick = async () => {
         try {
           const token = githubTokenInput.value.trim();
-          
           if (!token) {
             log('GitHub 토큰을 입력해주세요.', 'error');
             return;
           }
-
           output.innerHTML = '';
           log('브랜치 생성 시작...');
           await createBranch(token);
           log('브랜치 생성 완료', 'success');
-          
           log('아이콘 내보내기 시작...');
           parent.postMessage({ 
             pluginMessage: { 
               type: 'export-svg',
               data: {
-                path: 'packages/shopl-assets/src/icons/assets'
+                path: platformSelect.value === 'web' ? 'packages/shopl-assets/src/icons/assets' : 'sdg-resource/src/main/res/drawable'
               }
             } 
           }, '*');
@@ -426,32 +456,261 @@
         }
       };
 
+      // SVG -> Android Vector Drawable (여러 path 지원)
+      function svgToVectorDrawable(svgString) {
+        try {
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+          const svg = svgDoc.querySelector('svg');
+          
+          if (!svg) {
+            throw new Error('SVG 태그가 없습니다.');
+          }
+
+          // SVG 속성 파싱
+          let width = svg.getAttribute('width') || '24';
+          let height = svg.getAttribute('height') || '24';
+          let viewBox = svg.getAttribute('viewBox') || `0 0 ${width} ${height}`;
+          
+          // 숫자만 추출 (px, dp 등 단위 제거)
+          width = width.toString().replace(/[^\d.]/g, '');
+          height = height.toString().replace(/[^\d.]/g, '');
+          
+          const viewBoxValues = viewBox.split(/\s+/);
+          const viewportWidth = viewBoxValues[2] || width;
+          const viewportHeight = viewBoxValues[3] || height;
+
+          // 모든 그래픽 요소 찾기
+          const elements = svg.querySelectorAll('path, circle, rect, ellipse, line, polyline, polygon');
+          
+          if (elements.length === 0) {
+            throw new Error('변환 가능한 그래픽 요소가 없습니다.');
+          }
+
+          // Vector Drawable XML 생성
+          let vectorXml = `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="${width}dp"
+    android:height="${height}dp"
+    android:viewportWidth="${viewportWidth}"
+    android:viewportHeight="${viewportHeight}">`;
+
+          // 각 요소를 path로 변환
+          for (const element of elements) {
+            const pathData = convertElementToPath(element);
+            if (!pathData) continue;
+
+            // 스타일 속성 추출
+            const fill = element.getAttribute('fill') || 
+                        element.style.fill || 
+                        getComputedStyle(element).fill || 
+                        '#000000';
+            
+            const stroke = element.getAttribute('stroke') || 
+                          element.style.stroke || 
+                          getComputedStyle(element).stroke;
+            
+            const strokeWidth = element.getAttribute('stroke-width') || 
+                               element.style.strokeWidth || 
+                               getComputedStyle(element).strokeWidth;
+
+            const fillRule = element.getAttribute('fill-rule') || 
+                            element.style.fillRule || 
+                            getComputedStyle(element).fillRule;
+
+            const fillType = fillRule === 'evenodd' ? 'evenOdd' : 'nonZero';
+
+            // path 요소 생성
+            vectorXml += '\n  <path';
+            vectorXml += `\n      android:pathData="${pathData}"`;
+            
+            if (fill && fill !== 'none' && fill !== 'transparent') {
+              // CSS 색상을 hex로 변환
+              const hexColor = convertColorToHex(fill);
+              vectorXml += `\n      android:fillColor="${hexColor}"`;
+              vectorXml += `\n      android:fillType="${fillType}"`;
+            }
+            
+            if (stroke && stroke !== 'none' && stroke !== 'transparent') {
+              const hexStroke = convertColorToHex(stroke);
+              vectorXml += `\n      android:strokeColor="${hexStroke}"`;
+              if (strokeWidth) {
+                vectorXml += `\n      android:strokeWidth="${parseFloat(strokeWidth)}"`;
+              }
+            }
+            
+            vectorXml += '/>';
+          }
+
+          vectorXml += '\n</vector>';
+          return vectorXml;
+
+        } catch (error) {
+          console.error('SVG 변환 오류:', error);
+          return null;
+        }
+      }
+
+      // 각 SVG 요소를 path 데이터로 변환
+      function convertElementToPath(element) {
+        const tagName = element.tagName.toLowerCase();
+        
+        switch (tagName) {
+          case 'path':
+            return element.getAttribute('d');
+            
+          case 'circle':
+            const cx = parseFloat(element.getAttribute('cx') || 0);
+            const cy = parseFloat(element.getAttribute('cy') || 0);
+            const r = parseFloat(element.getAttribute('r') || 0);
+            return `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy}`;
+            
+          case 'rect':
+            const x = parseFloat(element.getAttribute('x') || 0);
+            const y = parseFloat(element.getAttribute('y') || 0);
+            const w = parseFloat(element.getAttribute('width') || 0);
+            const h = parseFloat(element.getAttribute('height') || 0);
+            const rx = parseFloat(element.getAttribute('rx') || 0);
+            const ry = parseFloat(element.getAttribute('ry') || rx);
+            
+            if (rx > 0 || ry > 0) {
+              // 둥근 모서리 사각형
+              return `M ${x + rx} ${y} L ${x + w - rx} ${y} Q ${x + w} ${y} ${x + w} ${y + ry} L ${x + w} ${y + h - ry} Q ${x + w} ${y + h} ${x + w - rx} ${y + h} L ${x + rx} ${y + h} Q ${x} ${y + h} ${x} ${y + h - ry} L ${x} ${y + ry} Q ${x} ${y} ${x + rx} ${y} Z`;
+            } else {
+              // 일반 사각형
+              return `M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z`;
+            }
+            
+          case 'ellipse':
+            const ecx = parseFloat(element.getAttribute('cx') || 0);
+            const ecy = parseFloat(element.getAttribute('cy') || 0);
+            const erx = parseFloat(element.getAttribute('rx') || 0);
+            const ery = parseFloat(element.getAttribute('ry') || 0);
+            return `M ${ecx - erx} ${ecy} A ${erx} ${ery} 0 1 0 ${ecx + erx} ${ecy} A ${erx} ${ery} 0 1 0 ${ecx - erx} ${ecy}`;
+            
+          case 'line':
+            const x1 = parseFloat(element.getAttribute('x1') || 0);
+            const y1 = parseFloat(element.getAttribute('y1') || 0);
+            const x2 = parseFloat(element.getAttribute('x2') || 0);
+            const y2 = parseFloat(element.getAttribute('y2') || 0);
+            return `M ${x1} ${y1} L ${x2} ${y2}`;
+            
+          case 'polyline':
+          case 'polygon':
+            const points = element.getAttribute('points') || '';
+            const coords = points.trim().split(/[\s,]+/).filter(p => p);
+            if (coords.length < 4) return null;
+            
+            let pathData = `M ${coords[0]} ${coords[1]}`;
+            for (let i = 2; i < coords.length; i += 2) {
+              if (coords[i + 1]) {
+                pathData += ` L ${coords[i]} ${coords[i + 1]}`;
+              }
+            }
+            if (tagName === 'polygon') {
+              pathData += ' Z';
+            }
+            return pathData;
+            
+          default:
+            return null;
+        }
+      }
+
+      // CSS 색상을 hex로 변환
+      function convertColorToHex(color) {
+        if (!color || color === 'none' || color === 'transparent') {
+          return '#00000000'; // 투명
+        }
+        
+        // 이미 hex 형식인 경우
+        if (color.startsWith('#')) {
+          return color.length === 4 ? 
+            '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3] : 
+            color;
+        }
+        
+        // rgb/rgba 형식 처리
+        const rgbMatch = color.match(/rgba?\(([^)]+)\)/);
+        if (rgbMatch) {
+          const values = rgbMatch[1].split(',').map(v => parseFloat(v.trim()));
+          const r = Math.round(values[0]).toString(16).padStart(2, '0');
+          const g = Math.round(values[1]).toString(16).padStart(2, '0');
+          const b = Math.round(values[2]).toString(16).padStart(2, '0');
+          const a = values[3] !== undefined ? 
+            Math.round(values[3] * 255).toString(16).padStart(2, '0') : 'ff';
+          return `#${a}${r}${g}${b}`;
+        }
+        
+        // 기본 색상명 처리
+        const colorMap = {
+          'black': '#000000',
+          'white': '#ffffff',
+          'red': '#ff0000',
+          'green': '#008000',
+          'blue': '#0000ff',
+          'yellow': '#ffff00',
+          'cyan': '#00ffff',
+          'magenta': '#ff00ff',
+          'gray': '#808080',
+          'grey': '#808080'
+        };
+        
+        return colorMap[color.toLowerCase()] || '#000000';
+      }
+
       // GitHub에 푸시
       async function pushToGitHub() {
         try {
           const token = githubTokenInput.value.trim();
-          
+          const repo = platformSelect.value === 'web' ? 'shopl/shoplflow' : 'shopl/shopl-design-guide-android';
           log('GitHub에 파일 업로드 중...');
+          let allSuccess = true;
           for (const item of svgExports) {
-            await uploadFile(token, item);
+            const result = await uploadFile(token, item, repo);
+            if (!result) allSuccess = false;
           }
-          log('GitHub 파일 업로드 완료', 'success');
-          log('GitHub Actions가 자동으로 실행됩니다...', 'info');
+          if (allSuccess) {
+            log('GitHub 파일 업로드 완료', 'success');
+            log('GitHub Actions가 자동으로 실행됩니다...', 'info');
+          }
         } catch (error) {
           log(`GitHub 업로드 오류: ${error.message}`, 'error');
         }
       }
 
       // 파일 업로드
-      async function uploadFile(token, item) {
-        const fileName = item.name.split('/').pop(); // 폴더 경로 제거
+      async function uploadFile(token, item, repo) {
+        const fileName = item.name.split('/').pop().trim(); // 폴더 경로 제거
         const prefix = item.name.split('/')[0];
-        const path = `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
-        const content = btoa(unescape(encodeURIComponent(item.data)));
+        let path, content, isMobile = platformSelect.value === 'mobile';
+        // prefix 조건 체크
+        const isWebPrefix = prefix.startsWith('shopl') || prefix.startsWith('hada');
+        if (isMobile && isWebPrefix) {
+          log(`${fileName} 아이콘은 모바일 플랫폼에서 업로드할 수 없습니다. (prefix: ${prefix})`, 'error');
+          return false;
+        }
+        if (!isMobile && !isWebPrefix) {
+          log(`${fileName} 아이콘은 웹 플랫폼에서만 업로드할 수 있습니다. (prefix: ${prefix})`, 'error');
+          return false;
+        }
+        if (isMobile) {
+          // 모바일: SVG -> Vector Drawable 변환
+          const xml = svgToVectorDrawable(item.data);
+          if (!xml) {
+            log(`${fileName} 변환 실패: 지원하지 않는 SVG입니다.`, 'error');
+            return false;
+          }
+          path = `sdg-resource/src/main/res/drawable/${fileName}.xml`;
+          content = btoa(unescape(encodeURIComponent(xml)));
+        } else {
+          path = `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
+          content = btoa(unescape(encodeURIComponent(item.data)));
+        }
 
         // 1. 기존 파일 정보 가져오기
         const getResponse = await fetch(
-          `https://api.github.com/repos/shopl/shoplflow/contents/${path}?ref=update/icon`,
+          `https://api.github.com/repos/${repo}/contents/${path}?ref=update/icon`,
           {
             headers: {
               Authorization: `token ${token}`,
@@ -469,7 +728,7 @@
 
         // 2. 파일 업로드/업데이트
         const response = await fetch(
-          `https://api.github.com/repos/shopl/shoplflow/contents/${path}`,
+          `https://api.github.com/repos/${repo}/contents/${path}`,
           {
             method: 'PUT',
             headers: {
@@ -490,15 +749,17 @@
           const error = await response.json();
           throw new Error(`파일 업로드 실패: ${error.message}`);
         }
+        return true;
       }
 
       // 브랜치 생성
       async function createBranch(token) {
         try {
+          const repo = platformSelect.value === 'web' ? 'shopl/shoplflow' : 'shopl/shopl-design-guide-android';
           // 1. main 브랜치의 최신 커밋 SHA 가져오기
           log('main 브랜치 정보 가져오는 중...');
           const mainRefResponse = await fetch(
-            'https://api.github.com/repos/shopl/shoplflow/git/refs/heads/main',
+            `https://api.github.com/repos/${repo}/git/refs/heads/main`,
             {
               headers: {
                 Authorization: `token ${token}`,
@@ -521,7 +782,7 @@
           // 2. 새 브랜치 생성
           log('새 브랜치 생성 중...');
           const response = await fetch(
-            'https://api.github.com/repos/shopl/shoplflow/git/refs',
+            `https://api.github.com/repos/${repo}/git/refs`,
             {
               method: 'POST',
               headers: {
@@ -538,7 +799,6 @@
 
           if (!response.ok) {
             const error = await response.json();
-            
             if (error.message && error.message.includes('Reference already exists')) {
               log('브랜치가 이미 존재합니다. 해당 브랜치를 사용합니다.', 'info');
               return true;
@@ -570,12 +830,25 @@
       };
 
       async function deleteFile(token, iconName) {
+        const repo = platformSelect.value === 'web' ? 'shopl/shoplflow' : 'shopl/shopl-design-guide-android';
         const prefix = iconName.split('/')[0];
-        const fileName = iconName.split('/').pop();
-        const path = `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
+        const fileName = iconName.split('/').pop().trim();
+        const isMobile = platformSelect.value === 'mobile';
+        const isWebPrefix = prefix.startsWith('shopl') || prefix.startsWith('hada');
+        if (isMobile && isWebPrefix) {
+          log(`${fileName} 아이콘은 모바일 플랫폼에서 삭제할 수 없습니다. (prefix: ${prefix})`, 'error');
+          return;
+        }
+        if (!isMobile && !isWebPrefix) {
+          log(`${fileName} 아이콘은 웹 플랫폼에서만 삭제할 수 있습니다. (prefix: ${prefix})`, 'error');
+          return;
+        }
+        const path = isMobile
+          ? `sdg-resource/src/main/res/drawable/${fileName}.xml`
+          : `packages/${prefix}-assets/src/icons/assets/${fileName}.svg`;
         // 1. sha 조회
         const getResponse = await fetch(
-          `https://api.github.com/repos/shopl/shoplflow/contents/${path}?ref=update/icon`,
+          `https://api.github.com/repos/${repo}/contents/${path}?ref=update/icon`,
           {
             headers: {
               Authorization: `token ${token}`,
@@ -592,7 +865,7 @@
         const sha = fileInfo.sha;
         // 2. 삭제 요청
         const response = await fetch(
-          `https://api.github.com/repos/shopl/shoplflow/contents/${path}`,
+          `https://api.github.com/repos/${repo}/contents/${path}`,
           {
             method: 'DELETE',
             headers: {
